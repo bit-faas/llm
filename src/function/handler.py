@@ -13,3 +13,10 @@ def handle(prompt: str) -> str:
         return model.run(prompt)
     except Exception as e:
         return f"Error in handle: {str(e)}"
+
+def healthz() -> str:
+    # Health check endpoint
+    model_path = os.environ.get("OFFLINE_MODEL_NAME")
+    if model_path and pathlib.Path(model_path).exists():
+        return "OK"
+    return "NOT READY"
