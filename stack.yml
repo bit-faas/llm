@@ -10,7 +10,7 @@ functions:
     min_replicas: 1
     build_args:
       ADDITIONAL_PACKAGE: ""
-  environment:
+    environment:
       MODEL_BACKEND: "gpt4all"   # or "chatgpt", "gemini", "perplexity", "deepseek"
       OFFLINE_MODEL_NAME: "/models/mistral-7b-instruct-v0.1.Q4_0.gguf"
       OFFLINE_MODEL_URL: "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct-v0.1.Q4_0.gguf"
