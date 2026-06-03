@@ -1,4 +1,4 @@
-# 📦 FaaS Template Repository
+# 📦 FaaS LLM Repository
 
 ## 📌 Overview
 
