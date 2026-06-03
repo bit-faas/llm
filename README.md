@@ -6,6 +6,8 @@ This repository provides a standardized template for building and deploying FaaS
 
 It ensures consistent structure, automated validation, and seamless deployment across environments.
 
+It also supports offline Large Language Model (LLM) inference using GPT4All, enabling AI-powered functions that run without external API dependencies.
+
 ---
 
 ## 🎯 Objective
@@ -14,14 +16,12 @@ It ensures consistent structure, automated validation, and seamless deployment a
 - Enable automatic testing before merge  
 - Support deployment across client machines  
 - Simplify scalability and management  
+- Provide LLM-backed functions that can run prompts locally using quantized `.gguf` models  
 
 ---
 
 ## 📂 Repository Structure
 
-This template follows a standardized structure:
-
-```
 faas-template/
 │
 ├── build.gradle        → Gradle tasks (build-faas, push-faas, deploy-faas)
@@ -29,18 +29,17 @@ faas-template/
 ├── deps.gradle         → External dependencies
 │
 ├── src/                → Source code (developer working directory)
-│   ├── handler.py
+│   ├── handler.py      → Includes handle() entrypoint with GPT4All integration
 │   ├── handler_test.py
 │
 ├── app/                → Client application using this FaaS module
 │
 └── README.md
-```
 
-**Notes:**
-- `src/` contains core function logic  
-- `app/` contains client applications invoking the FaaS  
-- `deps.gradle` manages external dependencies  
+Notes:
+- `src/handler.py` contains the `handle()` function that accepts a prompt and runs inference with GPT4All  
+- `OFFLINE_MODEL_NAME` and `OFFLINE_MODEL_URL` environment variables define which model to use and where to fetch it  
+- Models are stored locally for offline execution  
 
 ---
 
@@ -50,10 +49,8 @@ faas-template/
 - This folder is temporary and used only for build execution  
 - It must not be committed to the repository  
 
-**.gitignore requirement:**
-```
+.gitignore requirement:
 build/
-```
 
 ---
 
@@ -66,10 +63,11 @@ build/
 5. On success → reviewer approval  
 6. Merge to `main`  
 
-**CI Responsibilities:**
+CI Responsibilities:
 - Build FaaS module  
 - Execute unit tests (`handler_test.py`)  
 - Validate functionality before merge  
+- Verify LLM integration by running sample prompts against the offline model  
 
 ---
 
@@ -81,6 +79,7 @@ build/
 4. Test verification  
 5. Docker image creation  
 6. Push image to registry  
+7. On first run, the function downloads the specified `.gguf` model if not already cached  
 
 ---
 
@@ -91,6 +90,10 @@ build/
   - Pull the image  
   - Import into container runtime  
   - Deploy using OpenFaaS  
+
+LLM Support:
+- Functions can run prompts locally using GPT4All models  
+- No external API calls are required — inference is fully offline  
 
 ---
 
@@ -109,6 +112,7 @@ This supports:
 
 - Remote execution  
 - Multi-device usage (server, desktop, mobile)  
+- AI-powered responses via offline LLMs  
 
 ---
 
@@ -116,15 +120,14 @@ This supports:
 
 - Test file location: `src/handler_test.py`  
 
-**Standard test function:**
-```python
+Standard test function:
 def test_handle():
-```
 
-**Notes:**
+Notes:
 - Default test is included  
 - Developers should extend test cases  
 - Tests run automatically during CI  
+- LLM tests validate that `handle()` correctly loads the model and returns a response  
 
 ---
 
@@ -132,13 +135,14 @@ def test_handle():
 
 Integrated with Jenkins pipelines:
 
-**Test Pipeline**
+Test Pipeline
 - Trigger: PR to main  
 - Purpose: validation  
 
-**Production Pipeline**
+Production Pipeline
 - Trigger: main branch update  
 - Purpose: build and publish  
+- Includes validation of LLM model availability  
 
 ---
 
@@ -148,6 +152,7 @@ Integrated with Jenkins pipelines:
 - Do not commit build artifacts  
 - Ensure handler matches `function.yml`  
 - Always maintain/update `handler_test.py`  
+- Configure `OFFLINE_MODEL_NAME` and `OFFLINE_MODEL_URL` correctly for LLM functions  
 
 ---
 
@@ -157,6 +162,7 @@ Integrated with Jenkins pipelines:
 - Multi-function support  
 - Centralized dependency management  
 - Automated client updates  
+- Support for multiple LLM backends (e.g. Hugging Face Hub, local cache)  
 
 ---
 
@@ -167,3 +173,4 @@ This template is designed to:
 - Standardize FaaS development  
 - Reduce manual deployment effort  
 - Enable scalable distributed execution  
+- Provide offline AI inference using GPT4All models for robust, self-contained functions  
