@@ -1,49 +1,93 @@
 import os
-import requests
 import pathlib
-from gpt4all import GPT4All
-
-MODEL_NAME_ENV = "OFFLINE_MODEL_NAME"
-MODEL_URL_ENV = "OFFLINE_MODEL_URL"
-
-def ensure_model(model_path: str) -> str:
-    """
-    Ensure the offline model file exists locally.
-    If not, download from OFFLINE_MODEL_URL.
-    """
-    path = pathlib.Path(model_path)
-    if not path.exists():
-        url = os.environ.get(MODEL_URL_ENV)
-        if not url:
-            raise RuntimeError("No OFFLINE_MODEL_URL provided in environment")
-        print(f"Downloading {path.name} from {url}...")
-        resp = requests.get(url, stream=True)
-        resp.raise_for_status()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print("Model download complete.")
-    return str(path)
+import traceback
+import platform
+import socket
 
 
 def handle(prompt: str) -> str:
-    """
-    OpenFaaS function entrypoint.
-    Accepts a prompt string, ensures offline model is available,
-    and runs inference.
-    """
     try:
-        model_path = os.environ.get(MODEL_NAME_ENV)
-        if not model_path:
-            raise RuntimeError("No OFFLINE_MODEL_NAME provided in environment")
 
-        model_path = ensure_model(model_path)
+        model_name = os.environ.get("OFFLINE_MODEL_NAME")
+        model_url = os.environ.get("OFFLINE_MODEL_URL")
 
-        model = GPT4All(model_path)
-        with model.chat_session() as session:
-            response = session.prompt(prompt)
-        return response
+        output = []
+
+        output.append("===== LLM FUNCTION DIAGNOSTICS =====")
+        output.append("")
+
+        output.append(f"Prompt: {prompt}")
+        output.append("")
+
+        output.append("===== ENVIRONMENT =====")
+        output.append(f"OFFLINE_MODEL_NAME = {model_name}")
+        output.append(f"OFFLINE_MODEL_URL  = {model_url}")
+        output.append("")
+
+        output.append("===== PATH CHECK =====")
+
+        if model_name:
+
+            path = pathlib.Path(model_name)
+
+            output.append(f"Configured Path : {path}")
+            output.append(f"Parent Directory: {path.parent}")
+            output.append(f"File Exists     : {path.exists()}")
+            output.append(f"Parent Exists   : {path.parent.exists()}")
+
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                output.append("Directory Creation Test : SUCCESS")
+            except Exception as e:
+                output.append(
+                    f"Directory Creation Test : FAILED ({e})"
+                )
+
+        else:
+            output.append("OFFLINE_MODEL_NAME not set")
+
+        output.append("")
+
+        output.append("===== TMP WRITE TEST =====")
+
+        try:
+
+            test_file = pathlib.Path("/tmp/openfaas_test.txt")
+
+            with open(test_file, "w") as f:
+                f.write("openfaas test")
+
+            output.append("Write Test : SUCCESS")
+
+            test_file.unlink()
+
+        except Exception as e:
+            output.append(f"Write Test : FAILED ({e})")
+
+        output.append("")
+
+        output.append("===== SYSTEM INFO =====")
+        output.append(f"Hostname : {socket.gethostname()}")
+        output.append(f"Platform : {platform.platform()}")
+        output.append(f"Python   : {platform.python_version()}")
+        output.append(f"CWD      : {os.getcwd()}")
+
+        output.append("")
+        output.append("===== FUNCTION REACHED SUCCESSFULLY =====")
+
+        return "\n".join(output)
 
     except Exception as e:
-        return f"Error in handle: {str(e)}"
+
+        return f"""
+===== UNHANDLED EXCEPTION =====
+
+Type:
+{type(e).__name__}
+
+Message:
+{str(e)}
+
+Traceback:
+{traceback.format_exc()}
+"""
