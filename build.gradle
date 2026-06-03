@@ -1,0 +1,151 @@
+plugins {
+    id 'base'
+}
+
+ext {
+    gatewayUrl = "http://127.0.0.1:8080"
+    templateName = "python3-flask-debian"
+    templateRepo = "https://github.com/bit-template/python-flask-template.git"
+    templateBranch = "master"
+}
+
+def faas_yml = "stack.yml"
+
+tasks.create("downloadTemplate") {
+    group = "faas"
+    description = "Download template folder from Git repository"
+
+    doLast {
+        def buildTemplateDir = file("build/template/${templateName}")
+        def tempDir = file("build/faas_templates_temp")
+
+        if (tempDir.exists()) tempDir.deleteDir()
+        tempDir.mkdirs()
+
+        // Initialize git repo
+        exec { workingDir tempDir; commandLine "git", "init" }
+        exec { workingDir tempDir; commandLine "git", "remote", "add", "-f", "origin", templateRepo }
+        exec { workingDir tempDir; commandLine "git", "config", "core.sparseCheckout", "true" }
+
+        // Sparse checkout file
+        def sparseFile = new File(tempDir, ".git/info/sparse-checkout")
+        sparseFile.text = "template/${templateName}/*\n"
+
+        // Pull the folder
+        exec { workingDir tempDir; commandLine "git", "pull", "origin", templateBranch }
+
+        // Copy to build/template/
+        copy {
+            from new File(tempDir, "template/${templateName}")
+            into file(buildTemplateDir)
+        }
+
+        println "Template '${templateName}' downloaded to ${buildTemplateDir.absolutePath}"
+        tempDir.deleteDir()
+    }
+}
+
+tasks.create("copySources") {
+    group = "faas"
+    description = "Copy function folder & stack.yml into build directory"
+    dependsOn("downloadTemplate")
+    doLast {
+        // Copy handler folder
+        copy {
+            from "src"
+            into "build"
+        }
+
+        // Copy function yml
+        copy {
+            from "${faas_yml}"
+            into "build"
+        }
+
+        println "Copied function/ and ${faas_yml} into build/"
+    }
+}
+
+tasks.create("faasBuild") {
+    group = "faas"
+    description = "Build the faas function image"
+    dependsOn("copySources")
+    doLast {
+        exec {
+            workingDir "build"
+            commandLine "faas-cli", "build", "-f", "${faas_yml}"
+        }
+    }
+}
+
+tasks.create("faasPush") {
+    group = "faas"
+    description = "Push the faas function image"
+    doLast {
+        exec {
+            workingDir "build"
+            commandLine "faas-cli", "push", "-f", "${faas_yml}"
+        }
+    }
+}
+
+tasks.create("faasDeploy") {
+    group = "faas"
+    description = "Deploy the faas function"
+    doLast {
+        exec {
+            workingDir "build"
+            commandLine "faas-cli", "deploy", "-f", "${faas_yml}"
+        }
+    }
+}
+
+// --- Dynamic warmup cron based on all functions in stack.yml ---
+def stackFile = file(faas_yml)
+def funcNames = []
+if (stackFile.exists()) {
+    def proc = ["bash", "-c", "yq e '.functions | keys' ${faas_yml}"].execute()
+    funcNames = proc.text.readLines().collect { it.trim() }.findAll { it }
+}
+
+tasks.register("installWarmupCron") {
+    group = "ops"
+    description = "Install @reboot cron to warm all OpenFaaS functions"
+
+    doLast {
+        def existing = new ByteArrayOutputStream()
+        exec { commandLine "bash", "-lc", "crontab -l || true"; standardOutput = existing }
+        def current = existing.toString("UTF-8")
+
+        funcNames.each { fn ->
+            def warmupLine = "@reboot /bin/bash -lc 'until curl -s http://127.0.0.1:8080/healthz > /dev/null; do sleep 5; done; export OPENFAAS_URL=http://127.0.0.1:8080; echo warmup | /usr/local/bin/faas-cli invoke ${fn} >> ~/faas-warmup.log 2>&1'"
+            if (!current.contains(warmupLine)) {
+                def tmp = File.createTempFile("crontab", ".tmp")
+                tmp.text = (current.trim() + System.lineSeparator() + warmupLine + System.lineSeparator()).trim() + System.lineSeparator()
+                exec { commandLine "bash", "-lc", "crontab ${tmp.absolutePath}" }
+                println "Installed warmup cron entry for ${fn}."
+            } else {
+                println "Warmup cron entry for ${fn} already present. Skipping."
+            }
+        }
+    }
+}
+
+tasks.register("removeWarmupCron") {
+    group = "ops"
+    description = "Remove the warmup @reboot cron entries"
+
+    doLast {
+        def existing = new ByteArrayOutputStream()
+        exec { commandLine "bash", "-lc", "crontab -l || true"; standardOutput = existing }
+        def lines = existing.toString("UTF-8").readLines()
+        funcNames.each { fn ->
+            lines = lines.findAll { it.trim() && !it.contains("faas-cli invoke ${fn}") }
+        }
+        def tmp = File.createTempFile("crontab", ".tmp")
+        tmp.text = lines.join(System.lineSeparator()) + System.lineSeparator()
+        exec { commandLine "bash", "-lc", "crontab ${tmp.absolutePath}" }
+        println "Removed warmup cron entries (if existed)."
+    }
+}
+

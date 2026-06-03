@@ -1,0 +1,15 @@
+provider:
+  name: openfaas
+  gateway: http://127.0.0.1:8080
+
+functions:
+  $functionname:
+    lang: python3-flask-debian
+    handler: ./function
+    image: localhost:5000/$functionname:latest
+    min_replicas: 1
+    build_args:
+      ADDITIONAL_PACKAGE: ""
+    environment:
+      DIAGNOSTICS: "false"
+
