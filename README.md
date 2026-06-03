@@ -22,6 +22,7 @@ It also supports offline Large Language Model (LLM) inference using GPT4All, ena
 
 ## 📂 Repository Structure
 
+```
 faas-template/
 │
 ├── build.gradle        → Gradle tasks (build-faas, push-faas, deploy-faas)
@@ -35,6 +36,7 @@ faas-template/
 ├── app/                → Client application using this FaaS module
 │
 └── README.md
+```
 
 Notes:
 - `src/handler.py` contains the `handle()` function that accepts a prompt and runs inference with GPT4All  
